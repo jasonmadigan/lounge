@@ -75,6 +75,11 @@ function Client(manager, name, config) {
 		id: id++,
 		name: name,
 		networks: [],
+		push: {
+			currentCount: 0,
+			lastPushDate: Date.now(),
+			subscriptions: [],
+		},
 		sockets: manager.sockets,
 		manager: manager
 	});
@@ -95,10 +100,19 @@ function Client(manager, name, config) {
 		delay += 1000;
 	});
 
+	(client.config.pushSubscriptions || []).forEach((s) => {
+		this.registerPushSubscription(s, true);
+	});
+	client.config.pushSubscriptions = [];
+
 	if (client.name) {
 		log.info(`User ${colors.bold(client.name)} loaded`);
 	}
 }
+
+Client.prototype.isRegistered = function() {
+	return this.name.length > 0;
+};
 
 Client.prototype.emit = function(event, data) {
 	if (this.sockets !== null) {
@@ -527,6 +541,64 @@ Client.prototype.clientDetach = function(socketId) {
 			}
 		});
 	}
+};
+
+Client.prototype.registerPushSubscription = function(subscription, noSave) {
+	if (!_.isPlainObject(subscription) || !_.isPlainObject(subscription.keys)) {
+		return;
+	}
+
+	if (typeof subscription.endpoint !== "string" || !/^https?:\/\//.test(subscription.endpoint)) {
+		return;
+	}
+
+	if (typeof subscription.keys.p256dh !== "string" || typeof subscription.keys.auth !== "string") {
+		return;
+	}
+
+	const index = _.findIndex(this.push.subscriptions, (s) => s.endpoint === subscription.endpoint);
+	if (index > -1) {
+		return;
+	}
+
+	const data = {
+		endpoint: subscription.endpoint,
+		keys: {
+			p256dh: subscription.keys.p256dh,
+			auth: subscription.keys.auth
+		}
+	};
+
+	this.push.subscriptions.push(data);
+
+	if (!noSave) {
+		this.manager.updateUser(this.name, {
+			pushSubscriptions: this.push.subscriptions
+		});
+	}
+
+	log.debug(`Subscribed ${this.name} to ${subscription.endpoint}`);
+
+	return data;
+};
+
+Client.prototype.unregisterPushSubscription = function(endpoint) {
+	if (typeof endpoint !== "string" || !/^https?:\/\//.test(endpoint)) {
+		return;
+	}
+
+	const index = _.findIndex(this.push.subscriptions, (s) => s.endpoint === endpoint);
+
+	if (index < 0) {
+		return;
+	}
+
+	this.push.subscriptions.splice(index, 1);
+	this.manager.updateUser(this.name, {
+		pushSubscriptions: this.push.subscriptions
+	});
+
+	log.debug(`Unsubscribed ${this.name} from ${endpoint}`);
 };
 
 Client.prototype.save = _.debounce(function SaveClient() {

@@ -256,11 +256,37 @@ function init(socket, client) {
 				client.names(data);
 			}
 		);
+
+		socket.on("push:register", (subscription) => {
+			if (!client.isRegistered()) {
+				return;
+			}
+
+			const registration = client.registerPushSubscription(subscription);
+
+			if (registration) {
+				client.manager.webPush.pushSingle(client, registration, {
+					timestamp: Date.now(),
+					title: "The Lounge",
+					body: "🚀 Push notifications have been enabled"
+				});
+			}
+		});
+
+		socket.on("push:unregister", (endpoint) => {
+			if (!client.isRegistered()) {
+				return;
+			}
+
+			client.unregisterPushSubscription(endpoint);
+		});
+
 		socket.join(client.id);
 		socket.emit("init", {
 			active: client.lastActiveChannel,
 			networks: client.networks,
-			token: client.config.token || null
+			token: client.config.token || null,
+			applicationServerKey: manager.webPush.vapidKeys.publicKey,
 		});
 	}
 }

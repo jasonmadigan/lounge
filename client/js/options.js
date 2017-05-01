@@ -4,6 +4,7 @@ const $ = require("jquery");
 const settings = $("#settings");
 const userStyles = $("#user-specified-css");
 const storage = require("./localStorage");
+const socket = require("./socket");
 const tz = require("./libs/handlebars/tz");
 
 const windows = $("#windows");
@@ -30,7 +31,10 @@ const options = $.extend({
 
 module.exports = options;
 
-for (var i in options) {
+let applicationServerKey;
+module.exports.setApplicationServerKey = (key) => applicationServerKey = key;
+
+for (const i in options) {
 	if (i === "userStyles") {
 		if (!/[?&]nocss/.test(window.location.search)) {
 			$(document.head).find("#user-specified-css").html(options[i]);
@@ -100,6 +104,85 @@ $("#desktopNotifications").on("change", function() {
 	}
 });
 
+const pushNotificationsButton = $("#pushNotifications");
+
+function onPushButton() {
+	pushNotificationsButton.attr("disabled", true);
+
+	navigator.serviceWorker.register("service-worker.js").then((registration) => registration.pushManager.getSubscription().then((existingSubscription) => {
+		if (existingSubscription) {
+			const endpoint = existingSubscription.endpoint;
+
+			return existingSubscription.unsubscribe().then((successful) => {
+				if (successful) {
+					socket.emit("push:unregister", endpoint);
+
+					alternatePushButton().removeAttr("disabled");
+				}
+			});
+		}
+
+		return registration.pushManager.subscribe({
+			applicationServerKey: urlBase64ToUint8Array(applicationServerKey),
+			userVisibleOnly: true
+		}).then((subscription) => {
+			const rawKey = subscription.getKey ? subscription.getKey("p256dh") : "";
+			const key = rawKey ? window.btoa(String.fromCharCode.apply(null, new Uint8Array(rawKey))) : "";
+			const rawAuthSecret = subscription.getKey ? subscription.getKey("auth") : "";
+			const authSecret = rawAuthSecret ? window.btoa(String.fromCharCode.apply(null, new Uint8Array(rawAuthSecret))) : "";
+
+			socket.emit("push:register", {
+				endpoint: subscription.endpoint,
+				keys: {
+					p256dh: key,
+					auth: authSecret
+				}
+			});
+
+			alternatePushButton().removeAttr("disabled");
+		});
+	})).catch((err) => {
+		console.error(err);
+		window.alert(err);
+	});
+
+	return false;
+}
+
+if (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+	$("#pushNotificationsHttps").hide();
+
+	if ("serviceWorker" in navigator) {
+		navigator.serviceWorker.register("service-worker.js").then((registration) => {
+			if (!registration.pushManager) {
+				return;
+			}
+
+			return registration.pushManager.getSubscription().then((subscription) => {
+				$("#pushNotificationsUnsupported").hide();
+
+				pushNotificationsButton
+					.removeAttr("disabled")
+					.on("click", onPushButton);
+
+				if (subscription) {
+					alternatePushButton();
+				}
+			});
+		}).catch((err) => {
+			$("#pushNotificationsUnsupported p").text(err);
+		});
+	}
+}
+
+function alternatePushButton() {
+	const text = pushNotificationsButton.text();
+
+	return pushNotificationsButton
+		.text(pushNotificationsButton.data("text-alternate"))
+		.data("text-alternate", text);
+}
+
 // Updates the checkbox and warning in settings when the Settings page is
 // opened or when the checkbox state is changed.
 // When notifications are not supported, this is never called (because
@@ -131,4 +214,20 @@ if (("Notification" in window)) {
 	options.desktopNotifications = false;
 	desktopNotificationsCheckbox.attr("disabled", true);
 	desktopNotificationsCheckbox.attr("checked", false);
+}
+
+function urlBase64ToUint8Array(base64String) {
+	const padding = "=".repeat((4 - base64String.length % 4) % 4);
+	const base64 = (base64String + padding)
+		.replace(/-/g, "+")
+		.replace(/_/g, "/");
+
+	const rawData = window.atob(base64);
+	const outputArray = new Uint8Array(rawData.length);
+
+	for (let i = 0; i < rawData.length; ++i) {
+		outputArray[i] = rawData.charCodeAt(i);
+	}
+
+	return outputArray;
 }

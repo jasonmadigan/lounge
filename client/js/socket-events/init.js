@@ -3,6 +3,7 @@
 const $ = require("jquery");
 const socket = require("../socket");
 const render = require("../render");
+const options = require("../options");
 const sidebar = $("#sidebar");
 const storage = require("../localStorage");
 
@@ -22,6 +23,8 @@ socket.on("init", function(data) {
 	} else {
 		storage.remove("token");
 	}
+
+	options.setApplicationServerKey(data.applicationServerKey);
 
 	$("body").removeClass("signed-out");
 	$("#loading").remove();
