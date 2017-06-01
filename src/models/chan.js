@@ -95,6 +95,7 @@ Chan.prototype.getMode = function(name) {
 
 Chan.prototype.toJSON = function() {
 	var clone = _.clone(this);
+	clone.users = [];
 	clone.messages = clone.messages.slice(-100);
 	return clone;
 };

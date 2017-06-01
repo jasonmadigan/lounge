@@ -182,7 +182,13 @@ function renderNetworks(data) {
 			channels: channels
 		})
 	);
-	channels.forEach(renderChannel);
+	channels.forEach((channel) => {
+		renderChannel(channel);
+
+		if (channel.type === "channel") {
+			chat.find("#chan-" + channel.id).data("needsNamesRefresh", true);
+		}
+	});
 
 	utils.confirmExit();
 	sorting();
