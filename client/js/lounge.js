@@ -410,6 +410,14 @@ $(function() {
 		}
 	});
 
+	chat.on("click", ".condensed", function() {
+		$(this).toggleClass("closed");
+	});
+
+	chat.on("click", ".condensed div", function(e) {
+		e.stopPropagation();
+	});
+
 	chat.on("click", ".user", function() {
 		var name = $(this).data("name");
 		var chan = findCurrentNetworkChan(name);
@@ -673,11 +681,15 @@ $(function() {
 
 	chat.on("click", ".show-more-button", function() {
 		var self = $(this);
-		var count = self.parent().next(".messages").children(".msg").length;
+		var lastMessage = self.parent().next(".messages").children(".msg").first();
+		if (lastMessage.is(".condensed")) {
+			lastMessage = lastMessage.children(".msg").first();
+		}
+		var lastMessageId = lastMessage[0].id;
 		self.prop("disabled", true);
 		socket.emit("more", {
 			target: self.data("id"),
-			count: count
+			lastId: lastMessageId
 		});
 	});
 

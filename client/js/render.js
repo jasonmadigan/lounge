@@ -5,6 +5,8 @@ const templates = require("../views");
 const options = require("./options");
 const utils = require("./utils");
 const sorting = require("./sorting");
+const constants = require("./constants");
+const condense = require("./condensed");
 
 const chat = $("#chat");
 const sidebar = $("#sidebar");
@@ -18,14 +20,41 @@ module.exports = {
 	renderNetworks
 };
 
-function buildChannelMessages(channel, messages) {
-	return messages.reduce(function(docFragment, message) {
-		docFragment.append(buildChatMessage({
-			chan: channel,
+function buildChannelMessages(data) {
+	return data.messages.reduce(function(docFragment, message) {
+		appendMessage(docFragment, data.id, data.type, message.type, buildChatMessage({
+			chan: data.id,
 			msg: message
 		}));
 		return docFragment;
 	}, $(document.createDocumentFragment()));
+}
+
+function showAll() {
+	return options.join && options.part && options.quit && options.nick && options.mode;
+}
+
+function appendMessage(container, chan, chanType, messageType, msg) {
+	if (constants.condensedTypes.indexOf(messageType) !== -1 && chanType !== "lobby") {
+		var condensedTypesClasses = "." + constants.condensedTypes.join(", .");
+		var lastChild = container.children("div.msg").last();
+		var lastDate = (new Date(lastChild.attr("data-time"))).toDateString();
+		var msgDate = (new Date(msg.attr("data-time"))).toDateString();
+		if (lastChild && $(lastChild).hasClass("condensed") && !$(msg).hasClass("message") && lastDate === msgDate) {
+			lastChild.append(msg);
+			condense.updateText(lastChild, [messageType]);
+		} else if (lastChild && $(lastChild).is(condensedTypesClasses) && showAll()) {
+			var condensed = buildChatMessage({msg: {type: "condensed", time: msg.attr("data-time")}, chan: chan});
+			condensed.append(lastChild);
+			condensed.append(msg);
+			container.append(condensed);
+			condense.updateText(condensed, [messageType, lastChild.attr("data-type")]);
+		} else {
+			container.append(msg);
+		}
+	} else {
+		container.append(msg);
+	}
 }
 
 function buildChatMessage(data) {
@@ -44,25 +73,13 @@ function buildChatMessage(data) {
 		data.msg.highlight = true;
 	}
 
-	if ([
-		"invite",
-		"join",
-		"mode",
-		"kick",
-		"nick",
-		"part",
-		"quit",
-		"topic",
-		"topic_set_by",
-		"action",
-		"whois",
-		"ctcp",
-		"channel_list",
-		"ban_list",
-	].indexOf(type) !== -1) {
+	if (constants.handledTypes.indexOf(type) !== -1) {
+		data.msg.template = "actions/" + type;
 		template = "msg_action";
 	} else if (type === "unhandled") {
 		template = "msg_unhandled";
+	} else if (type === "condensed") {
+		template = "msg_condensed";
 	}
 
 	const msg = $(templates[template](data.msg));
@@ -95,7 +112,7 @@ function renderChannel(data) {
 }
 
 function renderChannelMessages(data) {
-	const documentFragment = buildChannelMessages(data.id, data.messages);
+	const documentFragment = buildChannelMessages(data);
 	const channel = chat.find("#chan-" + data.id + " .messages").append(documentFragment);
 
 	if (data.firstUnread > 0) {
@@ -104,6 +121,8 @@ function renderChannelMessages(data) {
 		// TODO: If the message is far off in the history, we still need to append the marker into DOM
 		if (!first.length) {
 			channel.prepend(templates.unread_marker());
+		} else if (first.parent().hasClass("condensed")) {
+			first.parent().before(templates.unread_marker());
 		} else {
 			first.before(templates.unread_marker());
 		}
@@ -124,6 +143,10 @@ function renderChannelMessages(data) {
 			}
 
 			if (lastDate.toDateString() !== msgDate.toDateString()) {
+				var parent = msg.parent();
+				if (parent.hasClass("condensed")) {
+					msg.insertAfter(parent);
+				}
 				msg.before(templates.date_marker({msgDate: msgDate}));
 			}
 

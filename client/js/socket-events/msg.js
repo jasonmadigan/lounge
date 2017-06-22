@@ -16,7 +16,7 @@ socket.on("msg", function(data) {
 	}
 
 	// Check if date changed
-	const prevMsg = $(container.find(".msg")).last();
+	let prevMsg = $(container.find(".msg")).last();
 	const prevMsgTime = new Date(prevMsg.attr("data-time"));
 	const msgTime = new Date(msg.attr("data-time"));
 
@@ -26,16 +26,20 @@ socket.on("msg", function(data) {
 	}
 
 	if (prevMsgTime.toDateString() !== msgTime.toDateString()) {
+		var parent = prevMsg.parent();
+		if (parent.hasClass("condensed")) {
+			prevMsg = parent;
+		}
 		prevMsg.after(templates.date_marker({msgDate: msgTime}));
 	}
 
 	// Add message to the container
-	container
-		.append(msg)
-		.trigger("msg", [
-			target,
-			data
-		]);
+	render.appendMessage(container, data.chan, $(target).attr("data-type"), data.msg.type, msg);
+
+	container.trigger("msg", [
+		target,
+		data
+	]);
 
 	var lastVisible = container.find("div:visible").last();
 	if (data.msg.self
