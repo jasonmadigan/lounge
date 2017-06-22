@@ -56,6 +56,15 @@ module.exports = {
 	theme: "themes/example.css",
 
 	//
+	// A list of plugins installed as global npm modules
+	//
+	// Find available themes at https://www.npmjs.com/search?q=keywords%3Alounge-theme
+	//
+	// @type	array
+	// @default	[]
+	plugins: [],
+
+	//
 	// Prefetch URLs
 	//
 	// If enabled, The Lounge will try to load thumbnails and site descriptions from

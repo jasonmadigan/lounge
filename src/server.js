@@ -15,6 +15,7 @@ var ldap = require("ldapjs");
 var colors = require("colors/safe");
 const net = require("net");
 const Identification = require("./identification");
+const themes = require("./plugins/themes");
 
 var manager = null;
 var authFunction = localAuth;
@@ -41,6 +42,11 @@ module.exports = function() {
 		}))
 		.set("view engine", "html")
 		.set("views", path.join(__dirname, "..", "client"));
+
+	app.get("/plugins/themes/:theme.css", (req, res) => {
+		const theme = req.params.theme;
+		return res.sendFile(themes.fileName(theme));
+	});
 
 	var config = Helper.config;
 	var server = null;
@@ -143,15 +149,7 @@ function index(req, res, next) {
 		Helper.config
 	);
 	data.gitCommit = Helper.getGitCommit();
-	data.themes = fs.readdirSync("client/themes/").filter(function(themeFile) {
-		return themeFile.endsWith(".css");
-	}).map(function(css) {
-		const filename = css.slice(0, -4);
-		return {
-			name: filename.charAt(0).toUpperCase() + filename.slice(1),
-			filename: filename
-		};
-	});
+	data.themes = themes.get();
 	res.setHeader("Content-Security-Policy", "default-src *; connect-src 'self' ws: wss:; style-src * 'unsafe-inline'; script-src 'self'; child-src 'self'; object-src 'none'; form-action 'none';");
 	res.setHeader("Referrer-Policy", "no-referrer");
 	res.render("index", data);

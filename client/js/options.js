@@ -39,7 +39,7 @@ for (var i in options) {
 	} else if (i === "highlights") {
 		settings.find("input[name=" + i + "]").val(options[i]);
 	} else if (i === "theme") {
-		$("#theme").attr("href", "themes/" + options[i] + ".css");
+		$("#theme").attr("href", options[i]);
 		settings.find("select[name=" + i + "]").val(options[i]);
 	} else if (options[i]) {
 		settings.find("input[name=" + i + "]").prop("checked", true);
@@ -74,7 +74,7 @@ settings.on("change", "input, select, textarea", function() {
 	} else if (name === "coloredNicks") {
 		chat.toggleClass("colored-nicks", self.prop("checked"));
 	} else if (name === "theme") {
-		$("#theme").attr("href", "themes/" + options[name] + ".css");
+		$("#theme").attr("href", options[name]);
 	} else if (name === "userStyles") {
 		userStyles.html(options[name]);
 	} else if (name === "highlights") {
