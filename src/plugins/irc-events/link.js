@@ -1,19 +1,18 @@
 "use strict";
 
 const cheerio = require("cheerio");
-const Msg = require("../../models/msg");
 const request = require("request");
 const Helper = require("../../helper");
 const es = require("event-stream");
 
 process.setMaxListeners(0);
 
-module.exports = function(client, chan, originalMsg) {
+module.exports = function(client, chan, msg) {
 	if (!Helper.config.prefetch) {
 		return;
 	}
 
-	const links = originalMsg.text
+	const links = msg.text
 		.replace(/\x02|\x1D|\x1F|\x16|\x0F|\x03(?:[0-9]{1,2}(?:,[0-9]{1,2})?)?/g, "")
 		.split(" ")
 		.filter((w) => /^https?:\/\//.test(w));
@@ -21,13 +20,6 @@ module.exports = function(client, chan, originalMsg) {
 	if (links.length === 0) {
 		return;
 	}
-
-	const msg = new Msg({
-		type: Msg.Type.TOGGLE,
-		time: originalMsg.time,
-		self: originalMsg.self,
-	});
-	chan.pushMessage(client, msg);
 
 	const link = escapeHeader(links[0]);
 	fetch(link, function(res) {
@@ -40,8 +32,7 @@ module.exports = function(client, chan, originalMsg) {
 };
 
 function parse(msg, url, res, client) {
-	var toggle = msg.toggle = {
-		id: msg.id,
+	const preview = {
 		type: "",
 		head: "",
 		body: "",
@@ -52,35 +43,35 @@ function parse(msg, url, res, client) {
 	switch (res.type) {
 	case "text/html":
 		var $ = cheerio.load(res.text);
-		toggle.type = "link";
-		toggle.head =
+		preview.type = "link";
+		preview.head =
 			$("meta[property=\"og:title\"]").attr("content")
 			|| $("title").text()
 			|| "";
-		toggle.body =
+		preview.body =
 			$("meta[property=\"og:description\"]").attr("content")
 			|| $("meta[name=\"description\"]").attr("content")
 			|| "";
-		toggle.thumb =
+		preview.thumb =
 			$("meta[property=\"og:image\"]").attr("content")
 			|| $("meta[name=\"twitter:image:src\"]").attr("content")
 			|| "";
 
 		// Make sure thumbnail is a valid url
-		if (!/^https?:\/\//.test(toggle.thumb)) {
-			toggle.thumb = "";
+		if (!/^https?:\/\//.test(preview.thumb)) {
+			preview.thumb = "";
 		}
 
 		// Verify that thumbnail pic exists and is under allowed size
-		if (toggle.thumb.length) {
-			fetch(escapeHeader(toggle.thumb), (resThumb) => {
+		if (preview.thumb.length) {
+			fetch(escapeHeader(preview.thumb), (resThumb) => {
 				if (resThumb === null
 				|| !(/^image\/.+/.test(resThumb.type))
 				|| resThumb.size > (Helper.config.prefetchMaxImageSize * 1024)) {
-					toggle.thumb = "";
+					preview.thumb = "";
 				}
 
-				emitToggle(client, toggle);
+				emitPreview(client, msg, preview);
 			});
 
 			return;
@@ -93,7 +84,7 @@ function parse(msg, url, res, client) {
 	case "image/jpg":
 	case "image/jpeg":
 		if (res.size < (Helper.config.prefetchMaxImageSize * 1024)) {
-			toggle.type = "image";
+			preview.type = "image";
 		} else {
 			return;
 		}
@@ -103,21 +94,26 @@ function parse(msg, url, res, client) {
 		return;
 	}
 
-	emitToggle(client, toggle);
+	emitPreview(client, msg, preview);
 }
 
-function emitToggle(client, toggle) {
+function emitPreview(client, msg, preview) {
 	// If there is no title but there is preview or description, set title
 	// otherwise bail out and show no preview
-	if (!toggle.head.length) {
-		if (toggle.thumb.length || toggle.body.length) {
-			toggle.head = "Untitled page";
+	if (!preview.head.length && preview.type === "link") {
+		if (preview.thumb.length || preview.body.length) {
+			preview.head = "Untitled page";
 		} else {
 			return;
 		}
 	}
 
-	client.emit("toggle", toggle);
+	msg.preview = preview;
+
+	client.emit("msg:preview", {
+		id: msg.id,
+		preview: preview
+	});
 }
 
 function fetch(url, cb) {
