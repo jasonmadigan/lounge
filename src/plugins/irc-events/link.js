@@ -3,6 +3,7 @@
 const cheerio = require("cheerio");
 const request = require("request");
 const Helper = require("../../helper");
+const findLinks = require("../../../client/js/libs/handlebars/ircmessageparser/findLinks");
 const es = require("event-stream");
 
 process.setMaxListeners(0);
@@ -12,16 +13,14 @@ module.exports = function(client, chan, msg) {
 		return;
 	}
 
-	const links = msg.text
-		.replace(/\x02|\x1D|\x1F|\x16|\x0F|\x03(?:[0-9]{1,2}(?:,[0-9]{1,2})?)?/g, "")
-		.split(" ")
-		.filter((w) => /^https?:\/\//.test(w));
+	const cleanText = msg.text.replace(/\x02|\x1D|\x1F|\x16|\x0F|\x03(?:[0-9]{1,2}(?:,[0-9]{1,2})?)?/g, "");
+	const links = findLinks(cleanText).filter((w) => /^https?:\/\//.test(w.link));
 
 	if (links.length === 0) {
 		return;
 	}
 
-	const link = escapeHeader(links[0]);
+	const link = escapeHeader(links[0].link);
 	fetch(link, function(res) {
 		if (res === null) {
 			return;
